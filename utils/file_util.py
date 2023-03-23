@@ -31,9 +31,9 @@ PPT_TYPE = [".ppt", ".pptx",
 
 
 def get_file_info(dir_info: ObjInfo, path):
-    print("-- file: " + path)
+    # print("-- file: " + path)
     suffix = os.path.splitext(path)[1]
-    print("-- file-suffix: " + suffix)
+    # print("-- file-suffix: " + suffix)
     dir_url, file_name = os.path.split(path)
     if suffix in IMAGE_TYPE:
         file_info = read_image(dir_info, path)

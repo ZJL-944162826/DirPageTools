@@ -1,3 +1,6 @@
+import json
+
+
 class ObjInfo:
     # id
     obj_id = ""
@@ -33,10 +36,28 @@ class ObjInfo:
         self.obj_path = obj_path
         self.obj_page = obj_page
         self.parent_obj_id = parent_obj_id
-        self.parent_obj = parent_obj
+        # self.parent_obj = parent_obj
         self.dir_list = dir_list
         self.file_list = file_list
 
 
+class ObjInfoDecode(json.JSONDecoder):
 
+    def decode(self, s, **kwargs):
+        dic = super().decode(s)
+        return self.dic_2_obj(dic)
 
+    def dic_2_obj(self, dic):
+        obj_info = ObjInfo(dic['obj_id'], dic['obj_type'], dic['obj_name'], dic['obj_path'], dic['obj_page'],
+                           dic['parent_obj_id'], None, [], [])
+        if dic['dir_list'] is not None and dic['dir_list'].__len__() > 0:
+            dir_list = []
+            for dir_child in dic['dir_list']:
+                dir_list.append(self.dic_2_obj(dir_child))
+            obj_info.dir_list = dir_list
+        if dic['file_list'] is not None and dic['file_list'].__len__() > 0:
+            file_list = []
+            for file_child in dic['file_list']:
+                file_list.append(self.dic_2_obj(file_child))
+            obj_info.file_list = file_list
+        return obj_info

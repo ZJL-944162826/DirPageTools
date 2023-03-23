@@ -1,9 +1,11 @@
+import json
+import os
+import re
+import subprocess
 import sys
 import tkinter as tk
-import subprocess
-import os
 import win32print
-import re
+from tkinter import filedialog
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QIcon
@@ -14,16 +16,16 @@ from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml.ns import qn
 from docx.shared import Inches, Cm, Pt
+from docx2pdf import convert
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Side, Border
 from openpyxl.worksheet.page import PageMargins
 
 from common import enum
-from do.obj_info import ObjInfo
+from do.obj_info import ObjInfo, ObjInfoDecode
 from ui.table_r import TableR
 from utils import dir_util
-from tkinter import filedialog
-from docx2pdf import convert
+from utils.encoder import ObjInfoEncoder
 
 
 class MainWin(QWidget):
@@ -44,12 +46,18 @@ class MainWin(QWidget):
     DOCX_TOP_TITLE = ["序号", "题名", "页次"]
     DOCX_TOP_WIDTH = [1, 8, 1]
 
+    # 用来存放所有的目录路径
+    FILE_LIST = []
+
+    ROOT_INFO = None
+
     def __init__(self, app):
         super().__init__()
         self.app = app
         self.in_lab = QLabel('输入目录：')
         self.in_edit = QLineEdit()
         self.in_edit.setReadOnly(True)
+        self.load_btn = QPushButton('读取')
         self.in_btn = QPushButton('选择文件')
         self.icon_map = {}
 
@@ -73,6 +81,7 @@ class MainWin(QWidget):
         self.out_edit = QLineEdit()
         self.out_btn = QPushButton('选择目录')
 
+        self.save_btn = QPushButton('保存')
         self.creat_btn = QPushButton('生成')
         self.print_btn = QPushButton('一键打印')
         self.exit_btn = QPushButton('结束')
@@ -91,6 +100,8 @@ class MainWin(QWidget):
         win_icon = QIcon()
         win_icon.addFile(r"static\icon\win.png")
         self.setWindowIcon(win_icon)
+        # 允许拖拽
+        self.setAcceptDrops(True)
         # 内容
         grid = QGridLayout()
         grid.setSpacing(20)
@@ -108,8 +119,10 @@ class MainWin(QWidget):
         grid.setSpacing(10)
         grid.addWidget(self.in_lab, 0, 0)
         grid.addWidget(self.in_edit, 0, 1)
-        grid.addWidget(self.in_btn, 0, 2)
+        grid.addWidget(self.load_btn, 0, 2)
+        grid.addWidget(self.in_btn, 0, 3)
 
+        self.load_btn.clicked.connect(self.load_file)
         self.in_btn.clicked.connect(self.select_source)
         return grid
 
@@ -138,7 +151,11 @@ class MainWin(QWidget):
         grid_r.addWidget(self.right_tab, 2, 0)
         grid.addLayout(grid_r, 0, 1)
         self.init_l_r()
+        self.init_root()
         return grid
+
+    def init_root(self):
+        self.ROOT_INFO = None
 
     def init_l_r(self):
         # 左
@@ -153,11 +170,10 @@ class MainWin(QWidget):
 
     def update_dir_model(self, root_path):
         self.init_l_r()
-        # 用来存放所有的目录路径
-        file_list = []
-        root_info = dir_util.foreach_dir(root_path, None, file_list)
-        self.foreach_dir(root_info.dir_list)
-        self.foreach_file(root_info.file_list)
+        self.init_root()
+        self.ROOT_INFO = dir_util.foreach_dir(root_path, self.ROOT_INFO, self.FILE_LIST)
+        self.foreach_dir(self.ROOT_INFO.dir_list)
+        self.foreach_file(self.ROOT_INFO.file_list)
 
     def foreach_dir(self, obj_list: [ObjInfo], parent_item=None):
         for line, obj_info in enumerate(obj_list):
@@ -235,9 +251,11 @@ class MainWin(QWidget):
     def init_final_model(self):
         grid = QHBoxLayout()
         grid.setSpacing(10)
+        grid.addWidget(self.save_btn, 100, Qt.AlignmentFlag.AlignRight)
         grid.addWidget(self.creat_btn, 10, Qt.AlignmentFlag.AlignRight)
         grid.addWidget(self.print_btn, 0, Qt.AlignmentFlag.AlignRight)
         grid.addWidget(self.exit_btn, 0, Qt.AlignmentFlag.AlignRight)
+        self.save_btn.clicked.connect(self.save_file)
         self.creat_btn.clicked.connect(self.create_file)
         self.print_btn.clicked.connect(self.print_file)
         self.exit_btn.clicked.connect(self.exit_window)
@@ -262,11 +280,55 @@ class MainWin(QWidget):
         if root_path is not None and root_path != '':
             self.update_dir_model(root_path)
 
+    def load_file(self):
+        try:
+            files = [('JSON Document', '*.json')]
+            root = tk.Tk()
+            root.withdraw()
+            file = filedialog.askopenfile(filetypes=files, defaultextension=files)
+            if file is not None:
+                self.init_l_r()
+                self.init_root()
+                # json_decoder = JsonDecoder()
+                # self.ROOT_INFO = dict_2_obj(json.load(file))
+                self.ROOT_INFO = json.load(file, cls=ObjInfoDecode)
+                self.foreach_dir(self.ROOT_INFO.dir_list)
+                self.foreach_file(self.ROOT_INFO.file_list)
+        except Exception as e:
+            print("引发异常：", repr(e))
+            QMessageBox.critical(self, "系统异常", repr(e))
+
     def select_target(self):
         root = tk.Tk()
         root.withdraw()
         root_path = filedialog.askdirectory()
         self.out_edit.setText(root_path)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():  # 当文件拖入此区域时为True
+            event.accept()  # 接受拖入文件
+        else:
+            event.ignore()  # 忽略拖入文件
+
+    def dropEvent(self, event):  # 本方法为父类方法，本方法中的event为鼠标放事件对象
+        urls = [u for u in event.mimeData().urls()]  # 范围文件路径的Qt内部类型对象列表，由于支持多个文件同时拖入所以使用列表存放
+        if urls is not None:
+            self.init_l_r()
+        for url in urls:
+            root_path = url.path()[1:]
+            self.ROOT_INFO = dir_util.foreach_dir(root_path, self.ROOT_INFO, self.FILE_LIST)
+            self.foreach_dir(self.ROOT_INFO.dir_list)
+            self.foreach_file(self.ROOT_INFO.file_list)
+
+    def save_file(self):
+        if self.ROOT_INFO is None:
+            QMessageBox.critical(self, "系统提示", "目录为空！")
+        files = [('JSON Document', '*.json')]
+        root = tk.Tk()
+        root.withdraw()
+        file = filedialog.asksaveasfile(filetypes=files, defaultextension=files)
+        file.write(json.dumps(self.ROOT_INFO, cls=ObjInfoEncoder, ensure_ascii=False).replace("\\", "/"))
+        tk.Button(root, text='保存')
 
     def create_file(self):
         try:

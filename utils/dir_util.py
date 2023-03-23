@@ -5,29 +5,37 @@ from do.obj_info import ObjInfo
 DIR_ID_TEMP = 0
 
 
-def foreach_dir(root_path, old_dir_info: ObjInfo = None, file_list: [] = None, root=True):
+def foreach_dir(root_path, old_dir_info: ObjInfo = None, file_list: [] = None):
     # 获取该目录下所有的文件名称和目录名称
-    if root is True:
+    if old_dir_info is None:
         old_dir_info = get_root_dir_info(root_path)
-    dir_or_files = os.listdir(root_path)
-    for dir_file in dir_or_files:
-        # 获取目录或者文件的路径
-        dir_file_path = os.path.join(root_path, dir_file)
-        dir_url, file_name = os.path.split(dir_file_path)
-        if file_name.startswith('~'):
-            continue
-        # 判断该路径为文件还是路径
-        if os.path.isdir(dir_file_path):
-            new_dir_info = get_dir_info(old_dir_info, dir_file_path)
-            # 递归获取所有文件和目录的路径
-            foreach_dir(dir_file_path, new_dir_info, file_list, False)
-        else:
-            file_info = file_util.get_file_info(old_dir_info, dir_file_path)
-            if file_info is not None:
-                old_dir_info.file_list.append(file_info)
-                update_page(old_dir_info, file_info.obj_page)
-                if file_list is not None:
-                    file_list.append(file_info)
+    if os.path.isdir(root_path):
+        dir_or_files = os.listdir(root_path)
+        for dir_file in dir_or_files:
+            # 获取目录或者文件的路径
+            dir_file_path = os.path.join(root_path, dir_file)
+            dir_url, file_name = os.path.split(dir_file_path)
+            if file_name.startswith('~'):
+                continue
+            # 判断该路径为文件还是路径
+            if os.path.isdir(dir_file_path):
+                new_dir_info = get_dir_info(old_dir_info, dir_file_path)
+                # 递归获取所有文件和目录的路径
+                foreach_dir(dir_file_path, new_dir_info, file_list)
+            else:
+                file_info = file_util.get_file_info(old_dir_info, dir_file_path)
+                if file_info is not None:
+                    old_dir_info.file_list.append(file_info)
+                    update_page(old_dir_info, file_info.obj_page)
+                    if file_list is not None:
+                        file_list.append(file_info)
+    else:
+        file_info = file_util.get_file_info(old_dir_info, root_path)
+        if file_info is not None:
+            old_dir_info.file_list.append(file_info)
+            update_page(old_dir_info, file_info.obj_page)
+            if file_list is not None:
+                file_list.append(file_info)
     return old_dir_info
 
 

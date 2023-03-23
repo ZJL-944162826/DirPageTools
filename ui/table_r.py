@@ -1,15 +1,12 @@
-import sys
-
-from PyQt5.QtGui import QFont, QBrush, QColor
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidget, QCheckBox, QHeaderView, QStyle, \
-    QStyleOptionButton, QTableWidgetItem, QGridLayout, QPushButton, QStyledItemDelegate
-from PyQt5.QtCore import Qt, pyqtSignal, QRect
-from do.obj_info import ObjInfo
-from common import enum
-from uuid import UUID
 import uuid
-import copy
 
+from PyQt5.QtCore import Qt, pyqtSignal, QRect
+from PyQt5.QtGui import QBrush, QColor, QDropEvent
+from PyQt5.QtWidgets import QTableWidget, QCheckBox, QHeaderView, QStyle, \
+    QStyleOptionButton, QTableWidgetItem, QPushButton, QAbstractItemView, QMessageBox
+
+from common import enum
+from do.obj_info import ObjInfo
 # 用来装行表头所有复选框 全局变量
 from ui.page_item import PageItem
 
@@ -80,6 +77,19 @@ class TableR(QTableWidget):
         # 表格控件
         # 交替行颜色
         self.setAlternatingRowColors(True)
+        # 能否拖拽
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        # 拖拽覆写
+        self.setDragDropOverwriteMode(False)
+        self.setDropIndicatorShown(True)
+        # 选择模式：拓展
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # 选择行为：行
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        # 拖拽的模式
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
 
     def append_row(self, row: int, data: ObjInfo, role: int, parent_id=None):
         row_id = str(uuid.uuid4())
@@ -227,6 +237,12 @@ class TableR(QTableWidget):
                 if checkbox.checkState() == Qt.Checked:
                     self.switch_row(i, i - 1)
 
+    def top_row(self, row: int):
+        if row <= 0:
+            return
+        else:
+            self.switch_row(row, row - 1)
+
     def down(self):
         i = self.rowCount()
         while i > 0:
@@ -237,6 +253,12 @@ class TableR(QTableWidget):
                 checkbox = self.cellWidget(i, 0)
                 if checkbox.checkState() == Qt.Checked:
                     self.switch_row(i, i + 1)
+
+    def down_row(self, row: int):
+        if row >= self.rowCount() - 1:
+            return
+        else:
+            self.switch_row(row, row + 1)
 
     def remove(self):
         i = self.rowCount()
@@ -328,6 +350,82 @@ class TableR(QTableWidget):
                 new_btn_2.clicked.connect(self.close_dir)
                 checkbox_1.setEnabled(False)
         self.reload_page()
+
+    def dropEvent(self, event: QDropEvent):
+        if not event.isAccepted() and event.source() == self:
+            index = self.indexAt(event.pos())
+            if not index.isValid():
+                QMessageBox.critical(self, "系统提示", "错误的行！")
+            # 结束行
+            end_row = index.row()
+            # 中间需要移动的行
+            start_row = self.selectedIndexes()[0].row()
+            move_row = end_row - start_row
+            # 下移
+            # if move_row >= 1:
+            #     for i in range(end_row):
+            #         if i <= start_row:
+            #             continue
+            #         if self.item(i, 2).isSelected():
+            #             move_row -= 1
+            # elif move_row <= -1:
+            #     for i in range(start_row):
+            #         if i <= end_row:
+            #             continue
+            #         if self.item(i, 2).isSelected():
+            #             move_row += 1
+            # 移动
+            last_selected_row = None
+            for selected_index in self.selectedIndexes():
+                if last_selected_row == selected_index.row():
+                    continue
+                else:
+                    last_selected_row = selected_index.row()
+                    selected_row = last_selected_row
+                    print("start=====>" + str(selected_row))
+                    print("end=====>" + str(end_row))
+                    print("move=====>" + str(move_row))
+                    # self.indexWidget(selected_index).clearFocus()
+                    if move_row >= 1:
+                        for j in range(move_row):
+                            self.down_row(selected_row)
+                            selected_row += 1
+                            self.selectRow(selected_row)
+                    elif move_row <= -1:
+                        for i in range(abs(move_row)):
+                            self.top_row(selected_row)
+                            selected_row -= 1
+                            self.selectRow(selected_row)
+
+        #     rows = sorted(set(item.row() for item in self.selectedItems()))  # 所有要移动的行
+        #     rows_to_move = [
+        #         [QTableWidgetItem(self.item(row_index, column_index)) for column_index in range(self.columnCount())]
+        #         for row_index in rows]
+        #     print(rows_to_move)
+        #     for row_index in reversed(rows):
+        #         self.removeRow(row_index)
+        #         if row_index < drop_row:
+        #             drop_row -= 1
+        #     print("row", self.rowCount())
+        #     for row_index, data in enumerate(rows_to_move):
+        #         row_index += drop_row
+        #         self.insertRow(row_index)
+        #         for column_index, column_data in enumerate(data):
+        #             self.setItem(row_index, column_index, column_data)
+        #     print("row", self.rowCount())
+        #     event.accept()
+        #     for row_index in range(len(rows_to_move)):
+        #         self.item(drop_row + row_index, 0).setSelected(True)
+        #         # self.item(drop_row + row_index, 1).setSelected(True)
+        #     print("row", self.rowCount())
+        # # super().dropEvent(event)
+        # print("row", self.rowCount())
+
+    def drop_on(self, event):
+        index = self.indexAt(event.pos())
+        if not index.isValid():
+            QMessageBox.critical(self, "系统提示", "错误的行！")
+        return index.row()
 
     def reload_page(self):
         all_page = 0
